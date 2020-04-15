@@ -16,8 +16,8 @@ OWM_CODE - API код для работы с https://api.openweathermap.org
 2. Получить telegram-токен и api-код на openweathermap.org
 3. Создать на их основе wtw_config.php или прописать здесь же
 4. Залить на сервер оба файла в одну директорию, сервер должен быть с  SSL
-5. Для установки Webhook на бота выполнить wtweather.php?swh или самостоятельно выполнить:
-    https://api.telegram.org/bot[Токен BOT_TOKEN]/setWebhook?url=[полная ссылка на wtweather.php]
+5. Для установки Webhook на бота выполнить wtweather.php?setup или самостоятельно выполнить:
+    https://api.telegram.org/bot[Токен BOT_TOKEN]/setWebhook?url=[полная ссылка на wtweather.php WEBHOOK_URL]
 6. Начать работу с ботом в Telegram
 */
 
@@ -123,29 +123,56 @@ function printWindDir($deg) {
   elseif ($deg <= 31*$pt) return "⬆️↖️ ССЗ";
   else return "⬆️⬆️ С";
 }
+
+function getClothes($fl_temp, $cond, $wind){
+  if ($fl_temp >= 25)
+    $res = "Сегодня жарко, наденьте <b>лёгкую майку</b>";
+  elseif ($fl_temp >= 20)
+    $res = "За окном тепло, советую <b>футболку/рубашку</b>";
+  elseif (($fl_temp >= 10 and $wind->speed <=5) or $fl_temp >= 15)
+    $res = "Довольно свежо, лучше надеть <b>толстовку</b>";
+  elseif ($fl_temp >= 10)
+    $res = "Свежо и ветрено, пора брать <b>ветровку</b>";
+  elseif ($fl_temp >= 5)
+    $res = "Прохладно, пора брать <b>ветровку</b>";
+  elseif ($fl_temp >= -10)
+    $res = "Около нуля, нужна <b>куртка</b>";
+  else
+    $res = "Холодно, советую <b>пуховик</b>";
+
+  if ($cond->main == 'Rain') //дождик
+    $res .= "\nИ не забудьте <b>зонтик</b>! 🌂";
+  elseif ($cond->id >= 800 and $cond->id <= 802 and $fl_temp > 20) //солнечно или легкая облачность
+    $res .= "\nТакже пригодятся солнцезащитные <b>очки</b> 🕶";
+
+  return $res;
+}
+
 function getWeather($city) {
   $raw = file_get_contents('https://api.openweathermap.org/data/2.5/weather?q='.urlencode($city).'&units=metric&lang=ru&appid='.OWM_CODE);
-  if (!$raw) return "А такой город точно существует? Напишите корректное название города";
+  if (!$raw or is_numeric($city)) return "А такой город точно существует? Напишите корректное название города";
   else {
     $json = json_decode($raw);
-    if ($json->cod == 200) {//всё ок
+    if ($json->cod == 200) {
       $res = "<b>".$json->name."</b> (".$json->sys->country.")\n";
       $res .= printTemp(round($json->main->temp)).", ".$json->weather[0]->description."\n";
       $res .= "Ощущается как: <b>".printTemp(round($json->main->feels_like))."</b>\n\n";
-      $res .= "💨 Ветер: <b>".round($json->wind->speed)."м/с</b> ".printWindDir($json->wind->deg)."\n";
+      $res .= "💨 Ветер: <b>".round($json->wind->speed)."м/с</b>  ".printWindDir($json->wind->deg)."\n";
       $res .= "🌡 Давление: <b>".round($json->main->pressure*76000/101325)."мм рт.ст.</b>\n";
       $res .= "💧 Влажность: <b>".round($json->main->humidity)."%</b>\n";
       $res .= "🌫 Облачность: <b>".round($json->clouds->all)."%</b>\n";
-      $res .= "Видимость: <b>".round($json->visibility/1000)."км</b>\n";
+      if ($json->visibility>0) $res .= "Видимость: <b>".round($json->visibility/1000)."км</b>\n";
+
+      $res .= "\nЧто надеть:\n".getClothes($json->main->temp,$json->weather[0],$json->wind);
       return $res;
     }
-    else //прочее
+    else
       return "Произошла неизвестная ошибка... Если через пару минут ничего не исправится, напишите: @semenovkm с пометкой '<i>Погодный бот</i>'"; 
   }
 }
 
-if (isset($_GET['swh'])) {
-  apiRequest('setWebhook', array('url' => WEBHOOK_URL));
+if (isset($_GET['setup'])) {
+  apiRequestJson('setWebhook', array('url' => WEBHOOK_URL));
   exit;
 }
 
